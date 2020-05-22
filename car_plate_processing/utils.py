@@ -47,6 +47,9 @@ def perform_processing(image: np.ndarray) -> str:
         if w < (width/3) or h < (w*height_to_width_ratio) or w == width:
             continue
 
+        # lines 53-87 were adapted from
+        # https://www.pyimagesearch.com/2014/04/21/building-pokedex-python-finding-game-boy-screen-step-4-6/
+        # https://www.pyimagesearch.com/2014/05/05/building-pokedex-python-opencv-perspective-warping-step-5-6/
         # reshape contour of potential plate
         pts = contour.reshape(contour.shape[0],2)
         # vertices of plate rectangle
