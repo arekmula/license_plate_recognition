@@ -5,6 +5,7 @@ from pathlib import Path
 import cv2
 
 from car_plate_processing import perform_processing
+from car_plate_processing import get_template_contours
 
 
 def main():
@@ -18,13 +19,16 @@ def main():
 
     images_paths = sorted([image_path for image_path in images_dir.iterdir() if image_path.name.endswith('.jpg')])
     results = {}
+
+    template_contours = get_template_contours()
+
     for image_path in images_paths:
         image = cv2.imread(str(image_path))
         if image is None:
             print(f'Error loading image {image_path}')
             continue
 
-        results[image_path.name] = perform_processing(image)
+        results[image_path.name] = perform_processing(image, template_contours)
 
     with results_file.open('w') as output_file:
         json.dump(results, output_file, indent=4)

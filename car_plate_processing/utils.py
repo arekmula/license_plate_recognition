@@ -2,12 +2,16 @@ import numpy as np
 import cv2
 from matplotlib import pyplot as plt
 
+all_chars = cv2.imread('resources/all_characters.jpg', 0)
+all_chars_blur = cv2.bilateralFilter(all_chars, 11, 17, 17)
+all_chars_edges = cv2.Canny(all_chars_blur, 30, 200)
+
 
 def empty_callback(value):
     pass
 
 
-def perform_processing(image: np.ndarray) -> str:
+def perform_processing(image: np.ndarray, contours_template) -> str:
     # print(f'image.shape: {image.shape}')
 
     print("\n \n \n \n \n \n")
@@ -65,6 +69,8 @@ def perform_processing(image: np.ndarray) -> str:
         potential_plates_vertices.append(vertices)
 
     # change perspective in all potential car plates, to "birds eye" view
+
+    warped_plates = []
     for idx, vertices in enumerate(potential_plates_vertices):
         # get all corners in easier way to code
         (tl, tr, br, bl) = vertices
@@ -78,7 +84,6 @@ def perform_processing(image: np.ndarray) -> str:
         maxHeight = max(int(heightA), int(heightB))
 
         # stop considering images that don't match car plate width to heigh ratio
-        print(maxWidth, maxHeight)
         if maxHeight < maxWidth * height_to_width_ratio:
             continue
 
@@ -95,9 +100,43 @@ def perform_processing(image: np.ndarray) -> str:
         # stop considering image that contains only zeros
         if not np.any(warp):
             continue
+        # add warped image to list
+        warped_plates.append(warp)
         # show warped image
-        cv2.imshow('warp' + str(idx), warp)
+        # cv2.imshow('warp' + str(idx), warp)
+
+
+
+    kernel = np.ones((5, 5), np.uint8)
+    cv2.drawContours(all_chars_edges, contours_template, -1, (0, 255, 0), 3)
+    for idx, plate in enumerate(warped_plates):
+        matches = []
+        plate_erode = cv2.erode(plate, kernel, iterations=1)
+        contours, hierarchy = cv2.findContours(plate_erode.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        cv2.drawContours(plate, contours,-1, (0, 255, 0), 3)
+        cv2.imshow("contours", plate)
+        cv2.imshow("contours1", all_chars_edges)
+        cv2.waitKey()
+        # for i in contours_template:
+        #     for j in contours:
+        #         ret = cv2.matchShapes(i, j, 1, 0.0)
+        #         matches.append(ret)
+        # matches.sort()
+        # print(matches[:10])
+        # cv2.waitKey()
+
+
 
     cv2.waitKey()
     cv2.destroyAllWindows()
     return 'PO12345'
+
+
+def get_template_contours():
+    kernel = np.ones((5, 5), np.uint8)
+    erosion = cv2.erode(all_chars_edges, kernel, iterations=1)
+    contours_template, hierarchy_template = cv2.findContours(erosion,
+                                                             cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    return contours_template
