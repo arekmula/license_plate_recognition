@@ -17,8 +17,8 @@ def perform_processing(image: np.ndarray) -> str:
     gray_img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # resize image for faster processing
-    gray_img = cv2.resize(gray_img, None, fx=0.3, fy=0.3)
-    image_resied = cv2.resize(image, None, fx=0.3, fy=0.3)
+    gray_img = cv2.resize(gray_img, (768, 576))
+    # image_resied = cv2.resize(image, (768, 576))
 
     # get shape of resized image
     height = gray_img.shape[0]
@@ -76,6 +76,12 @@ def perform_processing(image: np.ndarray) -> str:
         # take the maximum of the width and height values to reach final dimensions
         maxWidth = max(int(widthA), int(widthB))
         maxHeight = max(int(heightA), int(heightB))
+
+        # stop considering images that don't match car plate width to heigh ratio
+        print(maxWidth, maxHeight)
+        if maxHeight < maxWidth * height_to_width_ratio:
+            continue
+
         # construct destination points which will be used to map the screen to a top-down, "birds eye" view
         dst = np.array([
             [0, 0],
@@ -85,6 +91,10 @@ def perform_processing(image: np.ndarray) -> str:
         # calculate the perspective transform matrix and warp the perspective to grab the screen
         M = cv2.getPerspectiveTransform(vertices, dst)
         warp = cv2.warpPerspective(gray_edges, M, (maxWidth, maxHeight))
+
+        # stop considering image that contains only zeros
+        if not np.any(warp):
+            continue
         # show warped image
         cv2.imshow('warp' + str(idx), warp)
 
