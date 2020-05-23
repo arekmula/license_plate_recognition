@@ -1,10 +1,15 @@
 import numpy as np
 import cv2
+import os
+import glob
+import re
+
 from matplotlib import pyplot as plt
 
 all_chars = cv2.imread('resources/all_characters.jpg', 0)
 all_chars_blur = cv2.bilateralFilter(all_chars, 11, 17, 17)
 all_chars_edges = cv2.Canny(all_chars_blur, 30, 200)
+
 
 
 def empty_callback(value):
@@ -105,19 +110,28 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
         # show warped image
         # cv2.imshow('warp' + str(idx), warp)
 
+    kernel = np.ones((3, 3), np.uint8)
 
-
-    kernel = np.ones((5, 5), np.uint8)
-    cv2.drawContours(all_chars_edges, contours_template, -1, (0, 255, 0), 3)
     for idx, plate in enumerate(warped_plates):
         matches = []
-        plate_erode = cv2.erode(plate, kernel, iterations=1)
-        contours, hierarchy = cv2.findContours(plate_erode.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        plate_dilate = cv2.dilate(plate, kernel, iterations=1)
+        # TODO: try diffrent ContourApproximationModes, RetrievalModes RETR_TREE and RETR_LIST gives same result
+        # TODO: maybe try to find using cv2.RETR_EXTERNAL first, and if you couldn't find letters try diffrent one
+        contours, hierarchy = cv2.findContours(plate_dilate.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        # cv2.drawContours(plate, contours,-1, 100, 2)
+        # cv2.imshow("contours", plate)
+        # cv2.imshow("dilation ", plate_dilate)
+        # # cv2.imshow("contours1", all_chars_edges)
+        # cv2.waitKey()
 
-        cv2.drawContours(plate, contours,-1, (0, 255, 0), 3)
-        cv2.imshow("contours", plate)
-        cv2.imshow("contours1", all_chars_edges)
-        cv2.waitKey()
+        for letter, letter_cntr in contours_template.items():
+            for cntr in contours:
+                ret = cv2.matchShapes(letter_cntr[0], cntr, 1, 0.0)
+                matches.append(ret)
+
+        matches.sort()
+        print(matches[:10])
+
         # for i in contours_template:
         #     for j in contours:
         #         ret = cv2.matchShapes(i, j, 1, 0.0)
@@ -134,9 +148,24 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
 
 
 def get_template_contours():
-    kernel = np.ones((5, 5), np.uint8)
-    erosion = cv2.erode(all_chars_edges, kernel, iterations=1)
-    contours_template, hierarchy_template = cv2.findContours(erosion,
-                                                             cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # path to images of characters
+    images_dir = "resources/characters/"
+    data_path = os.path.join(images_dir, '*g')
+    # get all files from path
+    files = glob.glob(data_path)
 
-    return contours_template
+    # dictionary to store every letter contour
+    letters_contour = {}
+
+    kernel = np.ones((5, 5), np.uint8)
+
+    for f1 in files:
+        img_letter = cv2.imread(f1, 0)
+        letter = re.findall(r"q\w", f1)
+        img_letter_blur = cv2.bilateralFilter(img_letter, 11, 17, 17)
+        img_letter_edges = cv2.Canny(img_letter_blur, 30, 200)
+        img_letter_dilate = cv2.dilate(img_letter_edges, kernel, iterations=1)
+        contours, hierarchy = cv2.findContours(img_letter_dilate.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        letters_contour[str(letter[0][1])] = contours
+
+    return letters_contour
