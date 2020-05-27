@@ -100,7 +100,7 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
             [0, maxHeight - 1]], dtype="float32")
         # calculate the perspective transform matrix and warp the perspective to grab the screen
         M = cv2.getPerspectiveTransform(vertices, dst)
-        warp = cv2.warpPerspective(gray_edges, M, (maxWidth, maxHeight))
+        warp = cv2.warpPerspective(gray_img, M, (maxWidth, maxHeight))
 
         # stop considering image that contains only zeros
         if not np.any(warp):
@@ -110,35 +110,47 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
         # show warped image
         # cv2.imshow('warp' + str(idx), warp)
 
-    kernel = np.ones((3, 3), np.uint8)
-
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     for idx, plate in enumerate(warped_plates):
-        matches = []
-        plate_dilate = cv2.dilate(plate, kernel, iterations=1)
-        # TODO: try diffrent ContourApproximationModes, RetrievalModes RETR_TREE and RETR_LIST gives same result
-        # TODO: maybe try to find using cv2.RETR_EXTERNAL first, and if you couldn't find letters try diffrent one
-        contours, hierarchy = cv2.findContours(plate_dilate.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        # cv2.drawContours(plate, contours,-1, 100, 2)
-        # cv2.imshow("contours", plate)
-        # cv2.imshow("dilation ", plate_dilate)
-        # # cv2.imshow("contours1", all_chars_edges)
-        # cv2.waitKey()
+        matches = {}
+        # plate_blured = cv2.GaussianBlur(plate, (5, 5), 0)
+        plate_threshed = cv2.adaptiveThreshold(plate, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 199, 3)
+        plate_closed = cv2.morphologyEx(plate_threshed, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+        # plate_closed_blured = cv2.bilateralFilter(plate_closed, 11, 17, 17)
+        plate_closed_edges = cv2.Canny(plate_closed, 254, 255)
+
+        contours, hierarchy = cv2.findContours(plate_closed_edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        plate_closed_contours = cv2.drawContours(plate_closed_edges.copy(), contours, -1, 100, thickness=2)
+
+        cv2.imshow("plate closing", plate)
+        cv2.imshow("plate blured", plate_closed)
+        cv2.imshow("plate edges", plate_closed_edges)
+        cv2.imshow("plate contours", plate_closed_contours)
 
         for letter, letter_cntr in contours_template.items():
+            matches[letter] = 100
             for cntr in contours:
+                if len(cntr) < 200:
+                    continue
                 ret = cv2.matchShapes(letter_cntr[0], cntr, 1, 0.0)
-                matches.append(ret)
+                if ret < matches[letter]:
+                    matches[letter] = ret
 
-        matches.sort()
-        print(matches[:10])
+        print(matches)
 
-        # for i in contours_template:
-        #     for j in contours:
-        #         ret = cv2.matchShapes(i, j, 1, 0.0)
-        #         matches.append(ret)
-        # matches.sort()
-        # print(matches[:10])
-        # cv2.waitKey()
+        found = []
+        for i in range(12):
+            let = min(matches, key=matches.get)
+            found.append(let)
+            del matches[let]
+        print(found)
+
+        cv2.waitKey()
+
+        print("\n \n \n \n \n \n")
+
+
 
 
 
@@ -160,12 +172,19 @@ def get_template_contours():
     kernel = np.ones((5, 5), np.uint8)
 
     for f1 in files:
+        img = cv2.imread(f1)
         img_letter = cv2.imread(f1, 0)
         letter = re.findall(r"q\w", f1)
-        img_letter_blur = cv2.bilateralFilter(img_letter, 11, 17, 17)
-        img_letter_edges = cv2.Canny(img_letter_blur, 30, 200)
-        img_letter_dilate = cv2.dilate(img_letter_edges, kernel, iterations=1)
-        contours, hierarchy = cv2.findContours(img_letter_dilate.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # img_letter_blur = cv2.bilateralFilter(img_letter, 11, 17, 17) #TODO: maybe change blur
+        img_letter_edges = cv2.Canny(img_letter, 30, 200)
+        # img_letter_dilate = cv2.dilate(img_letter_edges, kernel, iterations=1)
+        contours, hierarchy = cv2.findContours(img_letter_edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        img_letter = cv2.drawContours(img.copy(), contours, -1, (0, 255, 0), thickness=2)
+        # print("SIMPLE ", len(contours[0]))
+        # print("NONE", len(contours1[0]))
+        # cv2.imshow("letter", img_letter)
+        # cv2.imshow("cntr", img)
+        cv2.waitKey()
         letters_contour[str(letter[0][1])] = contours
 
     return letters_contour
