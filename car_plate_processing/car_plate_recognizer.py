@@ -56,7 +56,7 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
         if w < (width/3) or h < (w*height_to_width_ratio) or w == width:
             continue
 
-        # lines 53-87 were adapted from
+        # lines 59-102 were adapted from
         # https://www.pyimagesearch.com/2014/04/21/building-pokedex-python-finding-game-boy-screen-step-4-6/
         # https://www.pyimagesearch.com/2014/05/05/building-pokedex-python-opencv-perspective-warping-step-5-6/
         # reshape contour of potential plate
@@ -74,7 +74,6 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
         potential_plates_vertices.append(vertices)
 
     # change perspective in all potential car plates, to "birds eye" view
-
     warped_plates = []
     for idx, vertices in enumerate(potential_plates_vertices):
         # get all corners in easier way to code
@@ -110,81 +109,12 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
         # show warped image
         # cv2.imshow('warp' + str(idx), warp)
 
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    for idx, plate in enumerate(warped_plates):
-        matches = {}
-        # plate_blured = cv2.GaussianBlur(plate, (5, 5), 0)
-        plate_threshed = cv2.adaptiveThreshold(plate, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 199, 3)
-        plate_closed = cv2.morphologyEx(plate_threshed, cv2.MORPH_CLOSE, kernel, iterations=2)
-
-        # plate_closed_blured = cv2.bilateralFilter(plate_closed, 11, 17, 17)
-        plate_closed_edges = cv2.Canny(plate_closed, 254, 255)
-
-        contours, hierarchy = cv2.findContours(plate_closed_edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-        plate_closed_contours = cv2.drawContours(plate_closed_edges.copy(), contours, -1, 100, thickness=2)
-
-        cv2.imshow("plate closing", plate)
-        cv2.imshow("plate blured", plate_closed)
-        cv2.imshow("plate edges", plate_closed_edges)
-        cv2.imshow("plate contours", plate_closed_contours)
-
-        for letter, letter_cntr in contours_template.items():
-            matches[letter] = 100
-            for cntr in contours:
-                if len(cntr) < 200:
-                    continue
-                ret = cv2.matchShapes(letter_cntr[0], cntr, 1, 0.0)
-                if ret < matches[letter]:
-                    matches[letter] = ret
-
-        print(matches)
-
-        found = []
-        for i in range(12):
-            let = min(matches, key=matches.get)
-            found.append(let)
-            del matches[let]
-        print(found)
-
-        cv2.waitKey()
-
-        print("\n \n \n \n \n \n")
-
-
-
+    """
+    There's no B D I O Z letters in the second part of car plate
+    """
 
 
     cv2.waitKey()
     cv2.destroyAllWindows()
     return 'PO12345'
 
-
-def get_template_contours():
-    # path to images of characters
-    images_dir = "resources/characters/"
-    data_path = os.path.join(images_dir, '*g')
-    # get all files from path
-    files = glob.glob(data_path)
-
-    # dictionary to store every letter contour
-    letters_contour = {}
-
-    kernel = np.ones((5, 5), np.uint8)
-
-    for f1 in files:
-        img = cv2.imread(f1)
-        img_letter = cv2.imread(f1, 0)
-        letter = re.findall(r"q\w", f1)
-        # img_letter_blur = cv2.bilateralFilter(img_letter, 11, 17, 17) #TODO: maybe change blur
-        img_letter_edges = cv2.Canny(img_letter, 30, 200)
-        # img_letter_dilate = cv2.dilate(img_letter_edges, kernel, iterations=1)
-        contours, hierarchy = cv2.findContours(img_letter_edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-        img_letter = cv2.drawContours(img.copy(), contours, -1, (0, 255, 0), thickness=2)
-        # print("SIMPLE ", len(contours[0]))
-        # print("NONE", len(contours1[0]))
-        # cv2.imshow("letter", img_letter)
-        # cv2.imshow("cntr", img)
-        cv2.waitKey()
-        letters_contour[str(letter[0][1])] = contours
-
-    return letters_contour

@@ -3,9 +3,11 @@ import json
 from pathlib import Path
 
 import cv2
+import time
 
 from car_plate_processing import perform_processing
-from car_plate_processing import get_template_contours
+from car_plate_processing import get_chars_contour
+from car_plate_processing import train_classifier
 
 
 def main():
@@ -17,10 +19,11 @@ def main():
     images_dir = Path(args.images_dir)
     results_file = Path(args.results_file)
 
+    template_contours = get_chars_contour()
+    classifications, flattened_images = train_classifier(template_contours)
+
     images_paths = sorted([image_path for image_path in images_dir.iterdir() if image_path.name.endswith('.jpg')])
     results = {}
-
-    template_contours = get_template_contours()
 
     for image_path in images_paths:
         image = cv2.imread(str(image_path))
