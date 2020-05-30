@@ -42,10 +42,9 @@ def train_KNN(classifications, flattened_images):
 
 
 def get_pontential_chars_ROI(chars_potential_plate):
-    offset = 0
+    offset = 0  # this variable helps if there's more potential chars on potential plate than defined in CHARACTERS_NUMBER
     while True:
         for ROI_idx, potential_chars_ROI in enumerate(chars_potential_plate):
-            # print(f"{ROI_idx} len: {len(potential_chars_ROI)} and {CHARACTERS_NUMBER + offset}")
             if len(potential_chars_ROI) == (CHARACTERS_NUMBER + offset):
                 return ROI_idx
             if len(potential_chars_ROI) == (CHARACTERS_NUMBER - offset):
@@ -54,26 +53,44 @@ def get_pontential_chars_ROI(chars_potential_plate):
 
 
 def recognize_chars_in_plate(potential_chars_ROI, img_gray):
+    # threshold image
     ret, img_threshed = cv2.threshold(img_gray, 200, 255, cv2.THRESH_BINARY_INV|cv2.THRESH_OTSU)
-    # cv2.imshow("Threshed", img_threshed)
-    # cv2.waitKey()
-
-    str_chars = ""
-
-    # TODO: sort potential chars from left to right
+    # license plate to be returned. We will add each recognized character
+    license_plate = ""
+    # sort potential chars ROIs from left to right
     potential_chars_ROI = sorted(potential_chars_ROI, key=lambda ROI:ROI[0])
-
+    # TODO: get rid of additional characters
+    # TODO: fix P->9, 2->S, X->O, 0->O
+    dist_list = []
     for current_char in potential_chars_ROI:
+        # get ROI of each potential character
         img_ROI = img_threshed[current_char[1]:current_char[1]+current_char[3],
                   current_char[0]:current_char[0]+current_char[2]]
+        # resize ROI to defined in KNN training size
         img_ROI_resized = cv2.resize(img_ROI, (RESIZED_CHAR_IMAGE_WIDTH, RESIZED_CHAR_IMAGE_HEIGHT))
+        # reshape ROI to match KNN data
         npa_ROI_resized = img_ROI_resized.reshape((1, RESIZED_CHAR_IMAGE_WIDTH * RESIZED_CHAR_IMAGE_HEIGHT))
+        # convert default image type (int) to float
         npa_ROI_resized = np.float32(npa_ROI_resized)
+        # find nearest neighbour
         retval, npa_results, neigh_resp, dists = kNearest.findNearest(npa_ROI_resized, k=1)
-        strCurrentChar = str(chr(int(npa_results[0][0])))
-        str_chars = str_chars + strCurrentChar
+        # save distance returned by KNN to determine which character is recognized incorrectly, when there's more chars
+        # than in CHARACTERS_NUMBER
+        dist = dists[0][0]
+        dist_list.append(dist)
+        # retrieve character
+        currentChar = str(chr(int(npa_results[0][0])))
+        # add character to license plate string
+        license_plate = license_plate + currentChar
 
-    return str_chars
+    print(dist_list)
+    # when there's more chars than it should be, determine which character is recognized incorrectly
+    while len(license_plate) > CHARACTERS_NUMBER:
+        incorrect_char_idx = np.argmax(dist_list)
+        license_plate = license_plate[0:incorrect_char_idx:] + license_plate[incorrect_char_idx+1::]
+        del(dist_list[incorrect_char_idx])
+
+    return license_plate
 
 def empty_callback(value):
     pass
@@ -158,7 +175,7 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
             [0, maxHeight - 1]], dtype="float32")
         # calculate the perspective transform matrix and warp the perspective to grab the screen
         M = cv2.getPerspectiveTransform(vertices, dst)
-        warp_edges = cv2.warpPerspective(gray_edges, M, (maxWidth, maxHeight))  # TODO:gray_img before
+        warp_edges = cv2.warpPerspective(gray_edges, M, (maxWidth, maxHeight))
         warp_gray = cv2.warpPerspective(gray_blur, M, (maxWidth, maxHeight))
 
         # stop considering image that contains only zeros
