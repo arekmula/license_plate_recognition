@@ -8,6 +8,7 @@ import time
 from car_plate_processing import perform_processing
 from car_plate_processing import get_chars_contour
 from car_plate_processing import train_classifier
+from car_plate_processing import train_KNN
 
 
 def main():
@@ -21,6 +22,7 @@ def main():
 
     template_contours = get_chars_contour()
     classifications, flattened_images = train_classifier(template_contours)
+    train_KNN(classifications, flattened_images)
 
     images_paths = sorted([image_path for image_path in images_dir.iterdir() if image_path.name.endswith('.jpg')])
     results = {}

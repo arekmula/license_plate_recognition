@@ -10,7 +10,70 @@ all_chars = cv2.imread('resources/all_characters.jpg', 0)
 all_chars_blur = cv2.bilateralFilter(all_chars, 11, 17, 17)
 all_chars_edges = cv2.Canny(all_chars_blur, 30, 200)
 
+kNearest = cv2.ml.KNearest_create()
 
+# The size of car_plates in Poland is 520 x 114 mm.
+# choose smaller ratio to accept bigger contours
+# Width to height ratio of car plates in Poland.
+PLATE_HEIGHT_TO_WIDTH_RATIO = 90 / 520
+
+CHAR_RATIO_MIN = 0.25
+CHAR_RATIO_MAX = 0.85
+
+CHARACTERS_NUMBER = 7
+
+RESIZED_CHAR_IMAGE_WIDTH = 20
+RESIZED_CHAR_IMAGE_HEIGHT = 30
+
+
+def train_KNN(classifications, flattened_images):
+    # training classifications
+    npa_classifications = classifications.astype(np.float32)
+    # training images
+    npa_flattened_images = flattened_images.astype(np.float32)
+    # reshape numpy array to 1d, necessary to pass to call to train
+    npa_classifications = npa_classifications.reshape((npa_classifications.size, 1))
+    # set default K to 1
+    kNearest.setDefaultK(1)
+    # train KNN object
+    kNearest.train(npa_flattened_images, cv2.ml.ROW_SAMPLE, npa_classifications)
+
+    return True
+
+
+def get_pontential_chars_ROI(chars_potential_plate):
+    offset = 0
+    while True:
+        for ROI_idx, potential_chars_ROI in enumerate(chars_potential_plate):
+            # print(f"{ROI_idx} len: {len(potential_chars_ROI)} and {CHARACTERS_NUMBER + offset}")
+            if len(potential_chars_ROI) == (CHARACTERS_NUMBER + offset):
+                return ROI_idx
+            if len(potential_chars_ROI) == (CHARACTERS_NUMBER - offset):
+                return ROI_idx
+        offset += 1
+
+
+def recognize_chars_in_plate(potential_chars_ROI, img_gray):
+    ret, img_threshed = cv2.threshold(img_gray, 200, 255, cv2.THRESH_BINARY_INV|cv2.THRESH_OTSU)
+    # cv2.imshow("Threshed", img_threshed)
+    # cv2.waitKey()
+
+    str_chars = ""
+
+    # TODO: sort potential chars from left to right
+    potential_chars_ROI = sorted(potential_chars_ROI, key=lambda ROI:ROI[0])
+
+    for current_char in potential_chars_ROI:
+        img_ROI = img_threshed[current_char[1]:current_char[1]+current_char[3],
+                  current_char[0]:current_char[0]+current_char[2]]
+        img_ROI_resized = cv2.resize(img_ROI, (RESIZED_CHAR_IMAGE_WIDTH, RESIZED_CHAR_IMAGE_HEIGHT))
+        npa_ROI_resized = img_ROI_resized.reshape((1, RESIZED_CHAR_IMAGE_WIDTH * RESIZED_CHAR_IMAGE_HEIGHT))
+        npa_ROI_resized = np.float32(npa_ROI_resized)
+        retval, npa_results, neigh_resp, dists = kNearest.findNearest(npa_ROI_resized, k=1)
+        strCurrentChar = str(chr(int(npa_results[0][0])))
+        str_chars = str_chars + strCurrentChar
+
+    return str_chars
 
 def empty_callback(value):
     pass
@@ -39,11 +102,6 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
     # find edges in image
     gray_edges = cv2.Canny(gray_blur, 30, 200)
 
-    # The size of car_plates in Poland is 520 x 114 mm
-    # width to height ratio of car plates in Poland.
-    # choose smaller ratio to accept bigger contours
-    height_to_width_ratio = 90/520
-
     # find contours on image with edges
     contours, hierarchy = cv2.findContours(gray_edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -53,7 +111,7 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
         [x, y, w, h] = cv2.boundingRect(contour)
 
         # exclude contours that are smaller than 1/3 of image width and their height doesn't match ratio of car_plate
-        if w < (width/3) or h < (w*height_to_width_ratio) or w == width:
+        if w < (width/3) or h < (w * PLATE_HEIGHT_TO_WIDTH_RATIO) or w == width:
             continue
 
         # lines 59-102 were adapted from
@@ -74,7 +132,8 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
         potential_plates_vertices.append(vertices)
 
     # change perspective in all potential car plates, to "birds eye" view
-    warped_plates = []
+    warped_plates_edges = []
+    warped_plates_gray = []
     for idx, vertices in enumerate(potential_plates_vertices):
         # get all corners in easier way to code
         (tl, tr, br, bl) = vertices
@@ -88,7 +147,7 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
         maxHeight = max(int(heightA), int(heightB))
 
         # stop considering images that don't match car plate width to heigh ratio
-        if maxHeight < maxWidth * height_to_width_ratio:
+        if maxHeight < maxWidth * PLATE_HEIGHT_TO_WIDTH_RATIO:
             continue
 
         # construct destination points which will be used to map the screen to a top-down, "birds eye" view
@@ -99,19 +158,65 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
             [0, maxHeight - 1]], dtype="float32")
         # calculate the perspective transform matrix and warp the perspective to grab the screen
         M = cv2.getPerspectiveTransform(vertices, dst)
-        warp = cv2.warpPerspective(gray_img, M, (maxWidth, maxHeight))
+        warp_edges = cv2.warpPerspective(gray_edges, M, (maxWidth, maxHeight))  # TODO:gray_img before
+        warp_gray = cv2.warpPerspective(gray_blur, M, (maxWidth, maxHeight))
 
         # stop considering image that contains only zeros
-        if not np.any(warp):
+        if not np.any(warp_edges):
             continue
         # add warped image to list
-        warped_plates.append(warp)
+        warped_plates_edges.append(warp_edges)
+        warped_plates_gray.append(warp_gray)
         # show warped image
         # cv2.imshow('warp' + str(idx), warp)
 
     """
     There's no B D I O Z letters in the second part of car plate
     """
+
+    chars_potential_plate = []
+    for idx, plate in enumerate(warped_plates_edges):
+        #  TODO: find ROI of character
+        plate_area = plate.size
+
+        char_contours, char_hierarchy = cv2.findContours(plate.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        # TODO: get rid of contour in contour
+        cntr_img = cv2.drawContours(plate.copy(), char_contours, -1, 100, thickness=2)
+        potential_chars_ROI = []
+        for i, cntr in enumerate(char_contours):
+            [x, y, w, h] = cv2.boundingRect(cntr)
+            bounding_area = w*h
+            # check contour size to match potential character size
+            if (bounding_area < (0.025 * plate_area) or bounding_area > (0.4 * plate_area)) or \
+                    (CHAR_RATIO_MIN * h > w or w > CHAR_RATIO_MAX * h):
+                continue  # no character found
+            # check if there's no repeating contour (contour in contour)
+            if char_hierarchy[0, i, 3] != -1:
+                if cv2.contourArea(char_contours[char_hierarchy[0, i, 3]]) < 0.4*plate_area:  # and if parent contour isn't plate contour
+                    continue
+            # add ROI of potential char
+            potential_chars_ROI.append([x, y, w, h])
+            cv2.rectangle(plate, (x, y), (x+w, y+h), 100)
+        chars_potential_plate.append(potential_chars_ROI)
+        cv2.imshow(str(idx), plate)
+        cv2.imshow(str(idx)+"cntr", cntr_img)
+
+    # if no potential chars in plate found, exit
+    # TODO: Do new post processing if you couldn't find char in plate
+    if len(chars_potential_plate) == 0:
+        return "PO12345"
+
+    for idx, potential_chars_ROI in enumerate(chars_potential_plate):
+        print(f"Potential plate: {idx} -> potential chars {len(potential_chars_ROI)} \n")
+
+    # choose potential_chars_ROI with 7 potential characters
+    potential_chars_ROI_idx = get_pontential_chars_ROI(chars_potential_plate)
+    potential_chars_ROI = chars_potential_plate[potential_chars_ROI_idx]
+    potential_chars_gray_img = warped_plates_gray[potential_chars_ROI_idx]
+    print(recognize_chars_in_plate(potential_chars_ROI, potential_chars_gray_img))
+
+
+
 
 
     cv2.waitKey()
