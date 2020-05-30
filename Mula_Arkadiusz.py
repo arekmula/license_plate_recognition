@@ -5,10 +5,10 @@ from pathlib import Path
 import cv2
 import time
 
-from car_plate_processing import perform_processing
-from car_plate_processing import get_chars_contour
-from car_plate_processing import train_classifier
-from car_plate_processing import train_KNN
+from license_plate_processing import perform_processing
+from license_plate_processing import get_chars_contour
+from license_plate_processing import train_classifier
+from license_plate_processing import train_KNN
 
 
 def main():

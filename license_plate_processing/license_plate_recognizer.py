@@ -12,7 +12,7 @@ all_chars_edges = cv2.Canny(all_chars_blur, 30, 200)
 
 kNearest = cv2.ml.KNearest_create()
 
-# The size of car_plates in Poland is 520 x 114 mm.
+# The size of license plate in Poland is 520 x 114 mm.
 # choose smaller ratio to accept bigger contours
 # Width to height ratio of car plates in Poland.
 PLATE_HEIGHT_TO_WIDTH_RATIO = 90 / 520
@@ -21,8 +21,8 @@ PLATE_HEIGHT_TO_WIDTH_RATIO = 90 / 520
 CHAR_RATIO_MIN = 0.25
 CHAR_RATIO_MAX = 0.85
 
-# Number of characters on polish car plate
-CHARACTERS_NUMBER = 7
+# Number of characters on polish license plate
+LICENSE_PLATE_LENGTH = 7
 
 RESIZED_CHAR_IMAGE_WIDTH = 20
 RESIZED_CHAR_IMAGE_HEIGHT = 30
@@ -47,9 +47,9 @@ def get_pontential_chars_ROI(chars_potential_plate):
     offset = 0  # this variable helps if there's more potential chars on potential plate than defined in CHARACTERS_NUMBER
     while True:
         for ROI_idx, potential_chars_ROI in enumerate(chars_potential_plate):
-            if len(potential_chars_ROI) == (CHARACTERS_NUMBER + offset):
+            if len(potential_chars_ROI) == (LICENSE_PLATE_LENGTH + offset):
                 return ROI_idx
-            if len(potential_chars_ROI) == (CHARACTERS_NUMBER - offset):
+            if len(potential_chars_ROI) == (LICENSE_PLATE_LENGTH - offset):
                 return ROI_idx
         offset += 1
 
@@ -61,7 +61,6 @@ def recognize_chars_in_plate(potential_chars_ROI, img_gray):
     license_plate = ""
     # sort potential chars ROIs from left to right
     potential_chars_ROI = sorted(potential_chars_ROI, key=lambda ROI:ROI[0])
-    # TODO: fix P->9, 2->S, X->O, 0->O
     dist_list = []
     for current_char in potential_chars_ROI:
         # get ROI of each potential character
@@ -86,12 +85,49 @@ def recognize_chars_in_plate(potential_chars_ROI, img_gray):
 
     print(dist_list)
     # when there's more chars than it should be, determine which character is recognized incorrectly
-    while len(license_plate) > CHARACTERS_NUMBER:
+    while len(license_plate) > LICENSE_PLATE_LENGTH:
         incorrect_char_idx = np.argmax(dist_list)
         license_plate = license_plate[0:incorrect_char_idx:] + license_plate[incorrect_char_idx+1::]
         del(dist_list[incorrect_char_idx])
 
     return license_plate
+
+
+def license_plate_rules(license_plate):
+    """
+    Check if returned license plate match rules about license plates in Poland.
+    If character in license plate is in incorrect place( for example Z in second part of plate) change it to correct one
+    (Z -> 2)
+    https://pl.wikipedia.org/wiki/Tablice_rejestracyjne_w_Polsce#Opis_systemu_tablic_rejestracyjnych_w_Polsce
+    :param license_plate: string containing license plate
+    :return: license_plate: string containing fixed license plate
+    """
+
+    # forbidden letters in first part of license plate and their matching
+    forbidden_chars_1 = {'0': 'O', '1': 'I', '2': 'Z', '3': 'B', '4': 'A', '5': 'S',
+                        '6': 'G', '7': 'Z', '8': 'B', '9': 'P', 'X': 'K'}
+
+    # forbidden letters in second part of licnse plate and their matching
+    forbidden_chars_2 = {'B': '8', 'D': '0', 'I': '1', 'O': '0', 'Z': '2'}
+    # TODO: if returned length of license plate is smaller than LICENSE_PLATE_LENGTH then don't change two first numbers to letters
+    # if any of first two characters is number change it to corresponding letters
+    if len(license_plate) > LICENSE_PLATE_LENGTH - 2:
+        for i in range(2):
+            if license_plate[i] in forbidden_chars_1:
+                new_char = forbidden_chars_1[license_plate[i]]
+                s = list(license_plate)
+                s[i] = new_char
+                license_plate = "".join(s)
+
+    # TODO: fill empty characters with X, based on character position on plate (distance between chars)
+
+
+    return license_plate
+
+
+
+
+
 
 def empty_callback(value):
     pass
@@ -102,7 +138,7 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
 
     print("\n \n \n \n \n \n")
 
-    # TODO: add image car_plate_processing here
+    # TODO: add image license_plate_processing here
     # convert image to gray scale
     gray_img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
@@ -231,7 +267,10 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
     potential_chars_ROI_idx = get_pontential_chars_ROI(chars_potential_plate)
     potential_chars_ROI = chars_potential_plate[potential_chars_ROI_idx]
     potential_chars_gray_img = warped_plates_gray[potential_chars_ROI_idx]
-    print(recognize_chars_in_plate(potential_chars_ROI, potential_chars_gray_img))
+
+    license_plate = recognize_chars_in_plate(potential_chars_ROI, potential_chars_gray_img)
+    print(license_plate)
+    print(license_plate_rules(license_plate))
 
 
 
