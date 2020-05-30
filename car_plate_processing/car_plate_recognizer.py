@@ -17,9 +17,11 @@ kNearest = cv2.ml.KNearest_create()
 # Width to height ratio of car plates in Poland.
 PLATE_HEIGHT_TO_WIDTH_RATIO = 90 / 520
 
+# Width and height ratio of character
 CHAR_RATIO_MIN = 0.25
 CHAR_RATIO_MAX = 0.85
 
+# Number of characters on polish car plate
 CHARACTERS_NUMBER = 7
 
 RESIZED_CHAR_IMAGE_WIDTH = 20
@@ -59,7 +61,6 @@ def recognize_chars_in_plate(potential_chars_ROI, img_gray):
     license_plate = ""
     # sort potential chars ROIs from left to right
     potential_chars_ROI = sorted(potential_chars_ROI, key=lambda ROI:ROI[0])
-    # TODO: get rid of additional characters
     # TODO: fix P->9, 2->S, X->O, 0->O
     dist_list = []
     for current_char in potential_chars_ROI:

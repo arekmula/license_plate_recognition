@@ -81,7 +81,7 @@ def train_classifier(chars_contour):
             # resize ROI image so it will be be more consistent in recognition and storage
             img_ROI_resized = cv2.resize(img_ROI1, (RESIZED_IMAGE_WIDTH, RESIZED_IMAGE_HEIGHT))
 
-            # create edge image of bigger ROI
+            # create edge image of resized ROI
             img_ROI_edges = cv2.Canny(img_ROI.copy(), 30, 200)
 
             # find contours on ROI image
@@ -97,12 +97,24 @@ def train_classifier(chars_contour):
                 matches[letter] = ret
             # find the best match
             best = min(matches, key=matches.get)
-            # check if there is no false classification when it comes to 9 and W
-            # those false classifactions appeared in testing
-            if idx < 3 and best == '6':
-                best = '9'  # we know that for each time contours are segregated from bottom right corner,
-                # and we know where our characters are on training image
-            if idx > 30 and best == 'O':
+
+            # check if there is no false classifications
+            # we know that everytime contours are ordered from bottom right corner
+            # and we know positions of our characters on training image (all_characters.jpg)
+            # those false classifactions appeared in testing:
+            if idx == 0 and best == '6':
+                best = '9'
+            if idx == 7 and best == 'S':
+                best = '2'
+            if idx == 10 and best == 'O':
+                best = 'M'
+            if idx == 11 and best == 'O':
+                best = "N"
+            if idx == 15 and best == 'O':
+                best = 'X'
+            if idx == 23 and best == '0':
+                best = 'D'
+            if idx == 30 and best == 'O':
                 best = 'W'
             # add our classification character to integer list of chars
             int_classifications.append(ord(best))
@@ -115,6 +127,7 @@ def train_classifier(chars_contour):
     flt_classifications = np.array(int_classifications, np.float32)
     # flatten numpy array of floats to 1d so we can write to file later
     npa_classifications = flt_classifications.reshape((flt_classifications.size, 1))
+    cv2.waitKey()
 
     print("\n \n training complete! \n \n")
 
