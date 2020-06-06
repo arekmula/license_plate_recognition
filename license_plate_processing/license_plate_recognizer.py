@@ -89,44 +89,81 @@ def recognize_chars_in_plate(potential_chars_ROI, img_gray):
         incorrect_char_idx = np.argmax(dist_list)
         license_plate = license_plate[0:incorrect_char_idx:] + license_plate[incorrect_char_idx+1::]
         del(dist_list[incorrect_char_idx])
+        del(potential_chars_ROI[incorrect_char_idx])
 
-    return license_plate
+    return license_plate, potential_chars_ROI
 
 
 def license_plate_rules(license_plate):
     """
     Check if returned license plate match rules about license plates in Poland.
-    If character in license plate is in incorrect place( for example Z in second part of plate) change it to correct one
-    (Z -> 2)
+    If character in license plate is in incorrect place( for example Z is in second part of plate) change it to correct
+    one (Z -> 2)
     https://pl.wikipedia.org/wiki/Tablice_rejestracyjne_w_Polsce#Opis_systemu_tablic_rejestracyjnych_w_Polsce
     :param license_plate: string containing license plate
     :return: license_plate: string containing fixed license plate
     """
 
-    # forbidden letters in first part of license plate and their matching
+    # forbidden letters in first part of license plate and theirs corresponding matching
     forbidden_chars_1 = {'0': 'O', '1': 'I', '2': 'Z', '3': 'B', '4': 'A', '5': 'S',
                         '6': 'G', '7': 'Z', '8': 'B', '9': 'P', 'X': 'K'}
-
-    # forbidden letters in second part of licnse plate and their matching
+    # forbidden letters in second part of license plate and theirs corresponding matching
     forbidden_chars_2 = {'B': '8', 'D': '0', 'I': '1', 'O': '0', 'Z': '2'}
-    # TODO: if returned length of license plate is smaller than LICENSE_PLATE_LENGTH then don't change two first numbers to letters
-    # if any of first two characters is number change it to corresponding letters
-    if len(license_plate) > LICENSE_PLATE_LENGTH - 2:
+
+    # if given length of license plate is smaller than LICENSE_PLATE_LENGTH
+    # then don't change two first numbers to letters
+    if len(license_plate) == LICENSE_PLATE_LENGTH:
+        # if any of first two characters is number change it to corresponding letters
         for i in range(2):
             if license_plate[i] in forbidden_chars_1:
                 new_char = forbidden_chars_1[license_plate[i]]
                 s = list(license_plate)
                 s[i] = new_char
                 license_plate = "".join(s)
-
-    # TODO: fill empty characters with X, based on character position on plate (distance between chars)
-
+        # check second part of license plate
+        for i in range(2, len(license_plate)):
+            if license_plate[i] in forbidden_chars_2:
+                new_char = forbidden_chars_2[license_plate[i]]
+                s = list(license_plate)
+                s[i] = new_char
+                license_plate = "".join(s)
 
     return license_plate
 
 
+def fill_empty_chars(license_plate, chars_ROI):
+    """
+    :param license_plate: license plate to fill
+    :param chars_ROI: [x, y, w, h] for each character
+    :return: filled license plate
+    """
+    # find the widest character
+    widest_char = max(map(lambda x: x[2], chars_ROI))
 
+    while len(license_plate) != LICENSE_PLATE_LENGTH:
+        # distance between detected chars
+        distance_between_chars = []
+        # calculate distance between each character
+        for i, ROI in enumerate(chars_ROI):
+            if i == 0:
+                distance = ROI[0]
+                distance_between_chars.append(distance)
+            else:
+                distance = chars_ROI[i][0] - (chars_ROI[i-1][0] + chars_ROI[i-1][2])
+                distance_between_chars.append(distance)
 
+        # find biggest distance between characters and fill this place with character and generated ROI
+        char_idx = np.argmax(distance_between_chars)
+        # add character in char_idx place
+        s = list(license_plate)
+        s.insert(char_idx, 'Q')  # insert Q, because it's forbidden character in polish license plate
+        license_plate = "".join(s)
+        # add generated ROI in char_idx place
+        new_ROI = list(np.copy(chars_ROI[char_idx]))
+        new_ROI[0] -= (widest_char + 1)
+        chars_ROI.insert(char_idx, new_ROI)
+
+    return license_plate
 
 
 def empty_callback(value):
@@ -224,17 +261,14 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
         # show warped image
         # cv2.imshow('warp' + str(idx), warp)
 
-    """
-    There's no B D I O Z letters in the second part of car plate
-    """
 
     chars_potential_plate = []
     for idx, plate in enumerate(warped_plates_edges):
-        #  TODO: find ROI of character
+
         plate_area = plate.size
 
         char_contours, char_hierarchy = cv2.findContours(plate.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        # TODO: get rid of contour in contour
+
         cntr_img = cv2.drawContours(plate.copy(), char_contours, -1, 100, thickness=2)
         potential_chars_ROI = []
         for i, cntr in enumerate(char_contours):
@@ -257,26 +291,30 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
 
     # if no potential chars in plate found, exit
     # TODO: Do new post processing if you couldn't find char in plate
-    if len(chars_potential_plate) == 0:
-        return "PO12345"
+    if not any(chars_potential_plate):
+        print(f"No chars found")
+        return 'QQQQQQQ'  # return Q because it's forbidden character in polish license_plate
 
     for idx, potential_chars_ROI in enumerate(chars_potential_plate):
         print(f"Potential plate: {idx} -> potential chars {len(potential_chars_ROI)} \n")
 
-    # choose potential_chars_ROI with 7 potential characters
+    # choose potential_chars_ROI with 7 potential characters. If there's no 7 characters choose closest one
     potential_chars_ROI_idx = get_pontential_chars_ROI(chars_potential_plate)
     potential_chars_ROI = chars_potential_plate[potential_chars_ROI_idx]
     potential_chars_gray_img = warped_plates_gray[potential_chars_ROI_idx]
 
-    license_plate = recognize_chars_in_plate(potential_chars_ROI, potential_chars_gray_img)
+    # recognize characters in license plate
+    license_plate, potential_chars_ROI = recognize_chars_in_plate(potential_chars_ROI, potential_chars_gray_img)
     print(license_plate)
-    print(license_plate_rules(license_plate))
-
-
-
-
+    # if there's less chars on license plate that it should be, fill empty spaces based on positions of chars
+    if len(potential_chars_ROI) < LICENSE_PLATE_LENGTH:
+        license_plate = fill_empty_chars(license_plate, potential_chars_ROI)
+        print(license_plate)
+    # check if returned license plate match polish rules. If not change character based on character similarity
+    license_plate_checked = license_plate_rules(license_plate)
+    print(license_plate_checked)
 
     cv2.waitKey()
     cv2.destroyAllWindows()
-    return 'PO12345'
+    return license_plate_checked
 
