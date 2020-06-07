@@ -27,6 +27,8 @@ LICENSE_PLATE_LENGTH = 7
 RESIZED_CHAR_IMAGE_WIDTH = 20
 RESIZED_CHAR_IMAGE_HEIGHT = 30
 
+SHOW_STEPS = False
+
 
 def train_KNN(classifications, flattened_images):
     # training classifications
@@ -83,7 +85,8 @@ def recognize_chars_in_plate(potential_chars_ROI, img_gray):
         # add character to license plate string
         license_plate = license_plate + currentChar
 
-    print(dist_list)
+    if SHOW_STEPS:
+        print(f"KNN distances: {dist_list}")
     # when there's more chars than it should be, determine which character is recognized incorrectly
     while len(license_plate) > LICENSE_PLATE_LENGTH:
         incorrect_char_idx = np.argmax(dist_list)
@@ -200,7 +203,7 @@ def find_potential_plates_vertices(gray_edges, width):
         if w < (width/3) or h < (w * PLATE_HEIGHT_TO_WIDTH_RATIO) or w == width:
             continue
 
-        # lines 59-102 were adapted from
+        # lines below adapted from
         # https://www.pyimagesearch.com/2014/04/21/building-pokedex-python-finding-game-boy-screen-step-4-6/
         # https://www.pyimagesearch.com/2014/05/05/building-pokedex-python-opencv-perspective-warping-step-5-6/
         # reshape contour of potential plate
@@ -260,8 +263,7 @@ def get_birds_eye_view(potential_plates_vertices, gray_edges, gray_blur, skip_ra
         # add warped image to list
         warped_plates_edges.append(warp_edges)
         warped_plates_gray.append(warp_gray)
-        # show warped image
-        # cv2.imshow('warp' + str(idx), warp)
+
     return warped_plates_edges, warped_plates_gray
 
 def find_potential_chars_on_plates(warped_plates_edges):
@@ -289,10 +291,31 @@ def find_potential_chars_on_plates(warped_plates_edges):
             potential_chars_ROI.append([x, y, w, h])
             cv2.rectangle(plate, (x, y), (x+w, y+h), 100)
         chars_potential_plate.append(potential_chars_ROI)
-        cv2.imshow(str(idx), plate)
-        cv2.imshow(str(idx)+"cntr", cntr_img)
+        if SHOW_STEPS:
+            cv2.imshow(str(idx) + "plate with char boundings", plate)
+            cv2.imshow(str(idx) + "plate with contours", cntr_img)
 
     return chars_potential_plate
+
+
+def three_chars_in_first_part(chars_ROI):
+    """
+    :param chars_ROI: [x, y, w, h] for each character
+    :return: TRUE if license plate has 3 chars in first part
+    """
+    distance_between_chars = []
+    for i, ROI in enumerate(chars_ROI):
+        if i < LICENSE_PLATE_LENGTH-1:
+            distance = chars_ROI[i+1][0] - (chars_ROI[i][0]+chars_ROI[i][2])
+            distance_between_chars.append(distance)
+
+    # not working ideal
+    if np.argmax(distance_between_chars) == 2:
+        return True
+    else:
+        return False
+
+
 
 def empty_callback(value):
     pass
@@ -301,9 +324,9 @@ def empty_callback(value):
 def perform_processing(image: np.ndarray, contours_template) -> str:
     # print(f'image.shape: {image.shape}')
 
-    print("\n \n \n \n \n \n")
+    if SHOW_STEPS:
+        print("\n \n \n \n \n \n")
 
-    # TODO: add image license_plate_processing here
     # preprocess image to get useful data
     gray_blur, gray_edges, width = preprocess(image)
     # find vertices of potential plate
@@ -314,7 +337,8 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
     chars_potential_plate = find_potential_chars_on_plates(warped_plates_edges)
     # if no potential chars in plate found gey birds eye view once more but with other parameters
     if not any(chars_potential_plate):
-        print(f"No chars found in first try")
+        if SHOW_STEPS:
+            print(f"No chars found in first try")
         # get bird eye view once again but this time, skip ratio checking
         warped_plates_edges, warped_plates_gray = get_birds_eye_view(potential_plates_vertices, gray_edges,
                                                                     gray_blur, True)
@@ -324,8 +348,9 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
         if not any(chars_potential_plate):
             return 'QQQQQQQ'  # return Q because it's forbidden character in polish license_plate
 
-    for idx, potential_chars_ROI in enumerate(chars_potential_plate):
-        print(f"Potential plate: {idx} -> potential chars {len(potential_chars_ROI)} \n")
+    if SHOW_STEPS:
+        for idx, potential_chars_ROI in enumerate(chars_potential_plate):
+            print(f"Potential plate index: {idx} -> potential chars {len(potential_chars_ROI)}")
 
     # Choose potential license plate with 7 potential characters. If there's no 7 potential characters in any of
     # potential license plate then choose license plate with closest to 7 number of characters.
@@ -336,18 +361,20 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
 
     # recognize characters in license plate
     license_plate, potential_chars_ROI = recognize_chars_in_plate(potential_chars_ROI, potential_chars_gray_img)
-    print(license_plate)
+    if SHOW_STEPS:
+        print(f"Recognized chars in license plate {license_plate}")
     # if there's less chars on license plate that it should be, fill empty spaces based on positions of chars
     if len(potential_chars_ROI) < LICENSE_PLATE_LENGTH:
         license_plate = fill_empty_chars(license_plate, potential_chars_ROI)
-        print(license_plate)
+        if SHOW_STEPS:
+            print(f"Recogniezed chars with filled empty spaces {license_plate}")
     # check if returned license plate match polish rules. If not change character based on character similarity
-    license_plate_checked = license_plate_rules(license_plate)
-    print(license_plate_checked)
+    license_plate = license_plate_rules(license_plate)
+    if SHOW_STEPS:
+        print(f"License plate after rules checking: {license_plate}")
 
-    # TODO: check if license plate has 3 chars in first part or 2 chars in first part
-
-    cv2.waitKey()
-    cv2.destroyAllWindows()
-    return license_plate_checked
+    if SHOW_STEPS:
+        cv2.waitKey()
+        cv2.destroyAllWindows()
+    return license_plate
 
