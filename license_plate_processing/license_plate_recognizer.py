@@ -219,7 +219,8 @@ def find_potential_plates_vertices(gray_edges, width):
 
     return potential_plates_vertices
 
-def get_birds_eye_view(potential_plates_vertices, gray_edges, gray_blur):
+
+def get_birds_eye_view(potential_plates_vertices, gray_edges, gray_blur, skip_ratio_check=False):
     # change perspective in all potential car plates, to "birds eye" view
     warped_plates_edges = []
     warped_plates_gray = []
@@ -235,9 +236,12 @@ def get_birds_eye_view(potential_plates_vertices, gray_edges, gray_blur):
         maxWidth = max(int(widthA), int(widthB))
         maxHeight = max(int(heightA), int(heightB))
 
-        # stop considering images that don't match car plate width to heigh ratio
-        if maxHeight < maxWidth * PLATE_HEIGHT_TO_WIDTH_RATIO:
-            continue
+        # if we couldn't get birds eye view in the first attempt, because image didnt match license plate ratio
+        # then skip this step
+        if not skip_ratio_check:
+            # stop considering images that don't match car plate width to heigh ratio
+            if maxHeight < maxWidth * PLATE_HEIGHT_TO_WIDTH_RATIO:
+                continue
 
         # construct destination points which will be used to map the screen to a top-down, "birds eye" view
         dst = np.array([
@@ -308,17 +312,23 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
     warped_plates_edges, warped_plates_gray = get_birds_eye_view(potential_plates_vertices,gray_edges, gray_blur)
     # find potential characters on potential plates
     chars_potential_plate = find_potential_chars_on_plates(warped_plates_edges)
-    # if no potential chars in plate found, exit
-    # TODO: Do new post processing if you couldn't find char in plate
+    # if no potential chars in plate found gey birds eye view once more but with other parameters
     if not any(chars_potential_plate):
-        print(f"No chars found")
-        return 'QQQQQQQ'  # return Q because it's forbidden character in polish license_plate
+        print(f"No chars found in first try")
+        # get bird eye view once again but this time, skip ratio checking
+        warped_plates_edges, warped_plates_gray = get_birds_eye_view(potential_plates_vertices, gray_edges,
+                                                                    gray_blur, True)
+        # find potential characters on potential plates
+        chars_potential_plate = find_potential_chars_on_plates(warped_plates_edges)
+        # if no potential chars found in second try then exit program
+        if not any(chars_potential_plate):
+            return 'QQQQQQQ'  # return Q because it's forbidden character in polish license_plate
 
     for idx, potential_chars_ROI in enumerate(chars_potential_plate):
         print(f"Potential plate: {idx} -> potential chars {len(potential_chars_ROI)} \n")
 
     # Choose potential license plate with 7 potential characters. If there's no 7 potential characters in any of
-    # potential license plate. Choose license plate with closest to 7 number of characters.
+    # potential license plate then choose license plate with closest to 7 number of characters.
     # Then get ROI of potential characters and gray image of this plate.
     potential_chars_ROI_idx = get_potential_chars_ROI(chars_potential_plate)
     potential_chars_ROI = chars_potential_plate[potential_chars_ROI_idx]
