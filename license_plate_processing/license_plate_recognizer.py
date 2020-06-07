@@ -43,7 +43,7 @@ def train_KNN(classifications, flattened_images):
     return True
 
 
-def get_pontential_chars_ROI(chars_potential_plate):
+def get_potential_chars_ROI(chars_potential_plate):
     offset = 0  # this variable helps if there's more potential chars on potential plate than defined in CHARACTERS_NUMBER
     while True:
         for ROI_idx, potential_chars_ROI in enumerate(chars_potential_plate):
@@ -165,17 +165,8 @@ def fill_empty_chars(license_plate, chars_ROI):
 
     return license_plate
 
+def preprocess(image):
 
-def empty_callback(value):
-    pass
-
-
-def perform_processing(image: np.ndarray, contours_template) -> str:
-    # print(f'image.shape: {image.shape}')
-
-    print("\n \n \n \n \n \n")
-
-    # TODO: add image license_plate_processing here
     # convert image to gray scale
     gray_img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
@@ -193,6 +184,10 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
     # find edges in image
     gray_edges = cv2.Canny(gray_blur, 30, 200)
 
+    return gray_blur, gray_edges, width
+
+
+def find_potential_plates_vertices(gray_edges, width):
     # find contours on image with edges
     contours, hierarchy = cv2.findContours(gray_edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -222,6 +217,9 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
         vertices[3] = pts[np.argmax(diff)]
         potential_plates_vertices.append(vertices)
 
+    return potential_plates_vertices
+
+def get_birds_eye_view(potential_plates_vertices, gray_edges, gray_blur):
     # change perspective in all potential car plates, to "birds eye" view
     warped_plates_edges = []
     warped_plates_gray = []
@@ -260,8 +258,9 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
         warped_plates_gray.append(warp_gray)
         # show warped image
         # cv2.imshow('warp' + str(idx), warp)
+    return warped_plates_edges, warped_plates_gray
 
-
+def find_potential_chars_on_plates(warped_plates_edges):
     chars_potential_plate = []
     for idx, plate in enumerate(warped_plates_edges):
 
@@ -289,6 +288,26 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
         cv2.imshow(str(idx), plate)
         cv2.imshow(str(idx)+"cntr", cntr_img)
 
+    return chars_potential_plate
+
+def empty_callback(value):
+    pass
+
+
+def perform_processing(image: np.ndarray, contours_template) -> str:
+    # print(f'image.shape: {image.shape}')
+
+    print("\n \n \n \n \n \n")
+
+    # TODO: add image license_plate_processing here
+    # preprocess image to get useful data
+    gray_blur, gray_edges, width = preprocess(image)
+    # find vertices of potential plate
+    potential_plates_vertices = find_potential_plates_vertices(gray_edges, width)
+    # get bird eye view of potential plate based on found vertices
+    warped_plates_edges, warped_plates_gray = get_birds_eye_view(potential_plates_vertices,gray_edges, gray_blur)
+    # find potential characters on potential plates
+    chars_potential_plate = find_potential_chars_on_plates(warped_plates_edges)
     # if no potential chars in plate found, exit
     # TODO: Do new post processing if you couldn't find char in plate
     if not any(chars_potential_plate):
@@ -298,8 +317,10 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
     for idx, potential_chars_ROI in enumerate(chars_potential_plate):
         print(f"Potential plate: {idx} -> potential chars {len(potential_chars_ROI)} \n")
 
-    # choose potential_chars_ROI with 7 potential characters. If there's no 7 characters choose closest one
-    potential_chars_ROI_idx = get_pontential_chars_ROI(chars_potential_plate)
+    # Choose potential license plate with 7 potential characters. If there's no 7 potential characters in any of
+    # potential license plate. Choose license plate with closest to 7 number of characters.
+    # Then get ROI of potential characters and gray image of this plate.
+    potential_chars_ROI_idx = get_potential_chars_ROI(chars_potential_plate)
     potential_chars_ROI = chars_potential_plate[potential_chars_ROI_idx]
     potential_chars_gray_img = warped_plates_gray[potential_chars_ROI_idx]
 
@@ -313,6 +334,8 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
     # check if returned license plate match polish rules. If not change character based on character similarity
     license_plate_checked = license_plate_rules(license_plate)
     print(license_plate_checked)
+
+    # TODO: check if license plate has 3 chars in first part or 2 chars in first part
 
     cv2.waitKey()
     cv2.destroyAllWindows()
