@@ -49,10 +49,11 @@ def get_potential_chars_ROI(chars_potential_plate):
     offset = 0  # this variable helps if there's more potential chars on potential plate than defined in CHARACTERS_NUMBER
     while True:
         for ROI_idx, potential_chars_ROI in enumerate(chars_potential_plate):
-            if len(potential_chars_ROI) == (LICENSE_PLATE_LENGTH + offset):
-                return ROI_idx
-            if len(potential_chars_ROI) == (LICENSE_PLATE_LENGTH - offset):
-                return ROI_idx
+            if len(potential_chars_ROI) > 0:
+                if len(potential_chars_ROI) == (LICENSE_PLATE_LENGTH + offset):
+                    return ROI_idx
+                if len(potential_chars_ROI) == (LICENSE_PLATE_LENGTH - offset):
+                    return ROI_idx
         offset += 1
 
 
