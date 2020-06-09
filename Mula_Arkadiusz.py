@@ -3,7 +3,6 @@ import json
 from pathlib import Path
 
 import cv2
-import time
 
 from license_plate_processing import perform_processing
 from license_plate_processing import get_chars_contour

@@ -1,10 +1,6 @@
 import numpy as np
 import cv2
-import os
-import glob
-import re
 
-from matplotlib import pyplot as plt
 
 all_chars = cv2.imread('resources/all_characters.jpg', 0)
 all_chars_blur = cv2.bilateralFilter(all_chars, 11, 17, 17)
@@ -204,7 +200,7 @@ def find_potential_plates_vertices(gray_edges, width):
         if w < (width/3) or h < (w * PLATE_HEIGHT_TO_WIDTH_RATIO) or w == width:
             continue
 
-        # lines below adapted from
+        # lines below and get_birds_eye_view are adapted from
         # https://www.pyimagesearch.com/2014/04/21/building-pokedex-python-finding-game-boy-screen-step-4-6/
         # https://www.pyimagesearch.com/2014/05/05/building-pokedex-python-opencv-perspective-warping-step-5-6/
         # reshape contour of potential plate
@@ -266,6 +262,7 @@ def get_birds_eye_view(potential_plates_vertices, gray_edges, gray_blur, skip_ra
         warped_plates_gray.append(warp_gray)
 
     return warped_plates_edges, warped_plates_gray
+
 
 def find_potential_chars_on_plates(warped_plates_edges):
     chars_potential_plate = []
