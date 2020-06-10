@@ -127,7 +127,7 @@ def train_classifier(chars_contour):
     flt_classifications = np.array(int_classifications, np.float32)
     # flatten numpy array of floats to 1d so we can write to file later
     npa_classifications = flt_classifications.reshape((flt_classifications.size, 1))
-    cv2.waitKey()
+    # cv2.waitKey()
 
     print("\n \n training complete! \n \n")
 

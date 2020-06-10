@@ -94,13 +94,14 @@ def recognize_chars_in_plate(potential_chars_ROI, img_gray):
     return license_plate, potential_chars_ROI
 
 
-def license_plate_rules(license_plate):
+def license_plate_rules(license_plate, three_chars):
     """
     Check if returned license plate match rules about license plates in Poland.
     If character in license plate is in incorrect place( for example Z is in second part of plate) change it to correct
     one (Z -> 2)
     https://pl.wikipedia.org/wiki/Tablice_rejestracyjne_w_Polsce#Opis_systemu_tablic_rejestracyjnych_w_Polsce
     :param license_plate: string containing license plate
+    :param three_chars: TRUE if license plate has 3 chars in first part
     :return: license_plate: string containing fixed license plate
     """
 
@@ -110,18 +111,22 @@ def license_plate_rules(license_plate):
     # forbidden letters in second part of license plate and theirs corresponding matching
     forbidden_chars_2 = {'B': '8', 'D': '0', 'I': '1', 'O': '0', 'Z': '2'}
 
+    first_part_len = 2
+    if three_chars:
+        first_part_len = 3
+
     # if given length of license plate is smaller than LICENSE_PLATE_LENGTH
     # then don't change two first numbers to letters
     if len(license_plate) == LICENSE_PLATE_LENGTH:
         # if any of first two characters is number change it to corresponding letters
-        for i in range(2):
+        for i in range(first_part_len):
             if license_plate[i] in forbidden_chars_1:
                 new_char = forbidden_chars_1[license_plate[i]]
                 s = list(license_plate)
                 s[i] = new_char
                 license_plate = "".join(s)
         # check second part of license plate
-        for i in range(2, len(license_plate)):
+        for i in range(first_part_len, len(license_plate)):
             if license_plate[i] in forbidden_chars_2:
                 new_char = forbidden_chars_2[license_plate[i]]
                 s = list(license_plate)
@@ -163,7 +168,7 @@ def fill_empty_chars(license_plate, chars_ROI):
         new_ROI[0] -= (widest_char + 1)
         chars_ROI.insert(char_idx, new_ROI)
 
-    return license_plate
+    return license_plate, chars_ROI
 
 def preprocess(image):
 
@@ -304,13 +309,20 @@ def three_chars_in_first_part(chars_ROI):
     distance_between_chars = []
     for i, ROI in enumerate(chars_ROI):
         if i < LICENSE_PLATE_LENGTH-1:
+            # calculate distance between neighbouhrs
             distance = chars_ROI[i+1][0] - (chars_ROI[i][0]+chars_ROI[i][2])
             distance_between_chars.append(distance)
 
-    # not working ideal
+    if SHOW_STEPS:
+        print(distance_between_chars)
+    # if biggest distance is between 3rd and 4th character then license plate has 3 characters in first part
     if np.argmax(distance_between_chars) == 2:
+        if SHOW_STEPS:
+            print("3 CHARS")
         return True
     else:
+        if SHOW_STEPS:
+            print("2 CHARS")
         return False
 
 
@@ -363,11 +375,13 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
         print(f"Recognized chars in license plate {license_plate}")
     # if there's less chars on license plate that it should be, fill empty spaces based on positions of chars
     if len(potential_chars_ROI) < LICENSE_PLATE_LENGTH:
-        license_plate = fill_empty_chars(license_plate, potential_chars_ROI)
+        license_plate, potential_chars_ROI = fill_empty_chars(license_plate, potential_chars_ROI)
         if SHOW_STEPS:
             print(f"Recogniezed chars with filled empty spaces {license_plate}")
+    # check if license plate has 3 characters in first part or 2 characters
+    three_chars = three_chars_in_first_part(potential_chars_ROI)
     # check if returned license plate match polish rules. If not change character based on character similarity
-    license_plate = license_plate_rules(license_plate)
+    license_plate = license_plate_rules(license_plate, three_chars)
     if SHOW_STEPS:
         print(f"License plate after rules checking: {license_plate}")
 
