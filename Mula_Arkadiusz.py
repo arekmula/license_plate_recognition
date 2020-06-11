@@ -32,7 +32,7 @@ def main():
             print(f'Error loading image {image_path}')
             continue
 
-        results[image_path.name] = perform_processing(image, template_contours)
+        results[image_path.name] = perform_processing(image)
 
     with results_file.open('w') as output_file:
         json.dump(results, output_file, indent=4)

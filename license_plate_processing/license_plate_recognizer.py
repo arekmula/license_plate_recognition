@@ -1,11 +1,6 @@
 import numpy as np
 import cv2
 
-
-all_chars = cv2.imread('resources/all_characters.jpg', 0)
-all_chars_blur = cv2.bilateralFilter(all_chars, 11, 17, 17)
-all_chars_edges = cv2.Canny(all_chars_blur, 30, 200)
-
 kNearest = cv2.ml.KNearest_create()
 
 # The size of license plate in Poland is 520 x 114 mm.
@@ -55,16 +50,16 @@ def get_potential_chars_ROI(chars_potential_plate):
 
 def recognize_chars_in_plate(potential_chars_ROI, img_gray):
     # threshold image
-    ret, img_threshed = cv2.threshold(img_gray, 200, 255, cv2.THRESH_BINARY_INV|cv2.THRESH_OTSU)
+    ret, img_threshed = cv2.threshold(img_gray, 200, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
     # license plate to be returned. We will add each recognized character
     license_plate = ""
     # sort potential chars ROIs from left to right
-    potential_chars_ROI = sorted(potential_chars_ROI, key=lambda ROI:ROI[0])
+    potential_chars_ROI = sorted(potential_chars_ROI, key=lambda ROI: ROI[0])
     dist_list = []
     for current_char in potential_chars_ROI:
         # get ROI of each potential character
-        img_ROI = img_threshed[current_char[1]:current_char[1]+current_char[3],
-                  current_char[0]:current_char[0]+current_char[2]]
+        img_ROI = img_threshed[current_char[1]:current_char[1] + current_char[3],
+                  current_char[0]:current_char[0] + current_char[2]]
         # resize ROI to defined in KNN training size
         img_ROI_resized = cv2.resize(img_ROI, (RESIZED_CHAR_IMAGE_WIDTH, RESIZED_CHAR_IMAGE_HEIGHT))
         # reshape ROI to match KNN data
@@ -87,9 +82,12 @@ def recognize_chars_in_plate(potential_chars_ROI, img_gray):
     # when there's more chars than it should be, determine which character is recognized incorrectly
     while len(license_plate) > LICENSE_PLATE_LENGTH:
         incorrect_char_idx = np.argmax(dist_list)
-        license_plate = license_plate[0:incorrect_char_idx:] + license_plate[incorrect_char_idx+1::]
-        del(dist_list[incorrect_char_idx])
-        del(potential_chars_ROI[incorrect_char_idx])
+        license_plate = license_plate[0:incorrect_char_idx:] + license_plate[incorrect_char_idx + 1::]
+        del (dist_list[incorrect_char_idx])
+        del (potential_chars_ROI[incorrect_char_idx])
+
+    if SHOW_STEPS:
+        print(f"Recognized chars in license plate {license_plate}")
 
     return license_plate, potential_chars_ROI
 
@@ -107,7 +105,7 @@ def license_plate_rules(license_plate, three_chars):
 
     # forbidden letters in first part of license plate and theirs corresponding matching
     forbidden_chars_1 = {'0': 'O', '1': 'I', '2': 'Z', '3': 'B', '4': 'A', '5': 'S',
-                        '6': 'G', '7': 'Z', '8': 'B', '9': 'P', 'X': 'K'}
+                         '6': 'G', '7': 'Z', '8': 'B', '9': 'P', 'X': 'K'}
     # forbidden letters in second part of license plate and theirs corresponding matching
     forbidden_chars_2 = {'B': '8', 'D': '0', 'I': '1', 'O': '0', 'Z': '2'}
 
@@ -133,6 +131,9 @@ def license_plate_rules(license_plate, three_chars):
                 s[i] = new_char
                 license_plate = "".join(s)
 
+    if SHOW_STEPS:
+        print(f"License plate after rules checking: {license_plate}")
+
     return license_plate
 
 
@@ -154,7 +155,7 @@ def fill_empty_chars(license_plate, chars_ROI):
                 distance = ROI[0]
                 distance_between_chars.append(distance)
             else:
-                distance = chars_ROI[i][0] - (chars_ROI[i-1][0] + chars_ROI[i-1][2])
+                distance = chars_ROI[i][0] - (chars_ROI[i - 1][0] + chars_ROI[i - 1][2])
                 distance_between_chars.append(distance)
 
         # find biggest distance between characters and fill this place with character and generated ROI
@@ -168,10 +169,13 @@ def fill_empty_chars(license_plate, chars_ROI):
         new_ROI[0] -= (widest_char + 1)
         chars_ROI.insert(char_idx, new_ROI)
 
+    if SHOW_STEPS:
+        print(f"Recogniezed chars with filled empty spaces {license_plate}")
+
     return license_plate, chars_ROI
 
-def preprocess(image):
 
+def preprocess(image, second_try=False):
     # convert image to gray scale
     gray_img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
@@ -184,7 +188,10 @@ def preprocess(image):
     width = gray_img.shape[1]
 
     # blur image
-    gray_blur = cv2.bilateralFilter(gray_img, 11, 17, 17)
+    if not second_try:
+        gray_blur = cv2.bilateralFilter(gray_img, 11, 55, 55)
+    else:  # change parameters of filter if we couldn't find any license plate after first preprocessing
+        gray_blur = cv2.bilateralFilter(gray_img, 11, 17, 17)
 
     # find edges in image
     gray_edges = cv2.Canny(gray_blur, 30, 200)
@@ -202,14 +209,14 @@ def find_potential_plates_vertices(gray_edges, width):
         [x, y, w, h] = cv2.boundingRect(contour)
 
         # exclude contours that are smaller than 1/3 of image width and their height doesn't match ratio of car_plate
-        if w < (width/3) or h < (w * PLATE_HEIGHT_TO_WIDTH_RATIO) or w == width:
+        if w < (width / 3) or h < (w * PLATE_HEIGHT_TO_WIDTH_RATIO) or w == width:
             continue
 
         # lines below and get_birds_eye_view are adapted from
         # https://www.pyimagesearch.com/2014/04/21/building-pokedex-python-finding-game-boy-screen-step-4-6/
         # https://www.pyimagesearch.com/2014/05/05/building-pokedex-python-opencv-perspective-warping-step-5-6/
         # reshape contour of potential plate
-        pts = contour.reshape(contour.shape[0],2)
+        pts = contour.reshape(contour.shape[0], 2)
         # vertices of plate rectangle
         vertices = np.zeros((4, 2), dtype="float32")
         # top left point has smallest sum and bottom right has smallest sum
@@ -281,18 +288,19 @@ def find_potential_chars_on_plates(warped_plates_edges):
         potential_chars_ROI = []
         for i, cntr in enumerate(char_contours):
             [x, y, w, h] = cv2.boundingRect(cntr)
-            bounding_area = w*h
+            bounding_area = w * h
             # check contour size to match potential character size
             if (bounding_area < (0.025 * plate_area) or bounding_area > (0.4 * plate_area)) or \
                     (CHAR_RATIO_MIN * h > w or w > CHAR_RATIO_MAX * h):
                 continue  # no character found
             # check if there's no repeating contour (contour in contour)
             if char_hierarchy[0, i, 3] != -1:
-                if cv2.contourArea(char_contours[char_hierarchy[0, i, 3]]) < 0.4*plate_area:  # and if parent contour isn't plate contour
+                # and if parent contour isn't plate contour
+                if cv2.contourArea(char_contours[char_hierarchy[0, i, 3]]) < 0.4 * plate_area:
                     continue
             # add ROI of potential char
             potential_chars_ROI.append([x, y, w, h])
-            cv2.rectangle(plate, (x, y), (x+w, y+h), 100)
+            cv2.rectangle(plate, (x, y), (x + w, y + h), 100)
         chars_potential_plate.append(potential_chars_ROI)
         if SHOW_STEPS:
             cv2.imshow(str(idx) + "plate with char boundings", plate)
@@ -308,9 +316,9 @@ def three_chars_in_first_part(chars_ROI):
     """
     distance_between_chars = []
     for i, ROI in enumerate(chars_ROI):
-        if i < LICENSE_PLATE_LENGTH-1:
+        if i < LICENSE_PLATE_LENGTH - 1:
             # calculate distance between neighbouhrs
-            distance = chars_ROI[i+1][0] - (chars_ROI[i][0]+chars_ROI[i][2])
+            distance = chars_ROI[i + 1][0] - (chars_ROI[i][0] + chars_ROI[i][2])
             distance_between_chars.append(distance)
 
     if SHOW_STEPS:
@@ -326,12 +334,7 @@ def three_chars_in_first_part(chars_ROI):
         return False
 
 
-
-def empty_callback(value):
-    pass
-
-
-def perform_processing(image: np.ndarray, contours_template) -> str:
+def perform_processing(image: np.ndarray) -> str:
     # print(f'image.shape: {image.shape}')
 
     if SHOW_STEPS:
@@ -339,24 +342,44 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
 
     # preprocess image to get useful data
     gray_blur, gray_edges, width = preprocess(image)
+
     # find vertices of potential plate
     potential_plates_vertices = find_potential_plates_vertices(gray_edges, width)
+
     # get bird eye view of potential plate based on found vertices
-    warped_plates_edges, warped_plates_gray = get_birds_eye_view(potential_plates_vertices,gray_edges, gray_blur)
+    warped_plates_edges, warped_plates_gray = get_birds_eye_view(potential_plates_vertices, gray_edges, gray_blur)
+
     # find potential characters on potential plates
     chars_potential_plate = find_potential_chars_on_plates(warped_plates_edges)
+
     # if no potential chars in plate found gey birds eye view once more but with other parameters
     if not any(chars_potential_plate):
         if SHOW_STEPS:
             print(f"No chars found in first try")
+
         # get bird eye view once again but this time, skip ratio checking
         warped_plates_edges, warped_plates_gray = get_birds_eye_view(potential_plates_vertices, gray_edges,
-                                                                    gray_blur, True)
+                                                                     gray_blur, True)
+
         # find potential characters on potential plates
         chars_potential_plate = find_potential_chars_on_plates(warped_plates_edges)
-        # if no potential chars found in second try then exit program
+
+        # if no potential chars found in second try then preprocess image once more with different blur parameters
         if not any(chars_potential_plate):
-            return 'QQQQQQQ'  # return Q because it's forbidden character in polish license_plate
+            if SHOW_STEPS:
+                print(f"No chars found in second try")
+            gray_blur, gray_edges, width = preprocess(image, True)
+            # find vertices of potential plate
+            potential_plates_vertices = find_potential_plates_vertices(gray_edges, width)
+            # get bird eye view of potential plate based on found vertices
+            warped_plates_edges, warped_plates_gray = get_birds_eye_view(potential_plates_vertices, gray_edges,
+                                                                         gray_blur)
+            # find potential characters on potential plates
+            chars_potential_plate = find_potential_chars_on_plates(warped_plates_edges)
+
+            # if no potential chars found in third try then return Qs which means we couldn't find license plate
+            if not any(chars_potential_plate):
+                return 'QQQQQQQ'  # return Q because it's forbidden character in polish license_plate
 
     if SHOW_STEPS:
         for idx, potential_chars_ROI in enumerate(chars_potential_plate):
@@ -371,22 +394,18 @@ def perform_processing(image: np.ndarray, contours_template) -> str:
 
     # recognize characters in license plate
     license_plate, potential_chars_ROI = recognize_chars_in_plate(potential_chars_ROI, potential_chars_gray_img)
-    if SHOW_STEPS:
-        print(f"Recognized chars in license plate {license_plate}")
+
     # if there's less chars on license plate that it should be, fill empty spaces based on positions of chars
     if len(potential_chars_ROI) < LICENSE_PLATE_LENGTH:
         license_plate, potential_chars_ROI = fill_empty_chars(license_plate, potential_chars_ROI)
-        if SHOW_STEPS:
-            print(f"Recogniezed chars with filled empty spaces {license_plate}")
+
     # check if license plate has 3 characters in first part or 2 characters
     three_chars = three_chars_in_first_part(potential_chars_ROI)
+
     # check if returned license plate match polish rules. If not change character based on character similarity
     license_plate = license_plate_rules(license_plate, three_chars)
-    if SHOW_STEPS:
-        print(f"License plate after rules checking: {license_plate}")
 
     if SHOW_STEPS:
         cv2.waitKey()
         cv2.destroyAllWindows()
     return license_plate
-
