@@ -5,7 +5,7 @@ kNearest = cv2.ml.KNearest_create()
 
 # The size of license plate in Poland is 520 x 114 mm.
 # choose smaller ratio to accept bigger contours
-# Width to height ratio of car plates in Poland.
+# Width to height ratio of license plates in Poland.
 PLATE_HEIGHT_TO_WIDTH_RATIO = 90 / 520
 
 # Width and height ratio of character
@@ -170,12 +170,22 @@ def fill_empty_chars(license_plate, chars_ROI):
         chars_ROI.insert(char_idx, new_ROI)
 
     if SHOW_STEPS:
-        print(f"Recogniezed chars with filled empty spaces {license_plate}")
+        print(f"Recognized license plate with filled empty spaces {license_plate}")
 
     return license_plate, chars_ROI
 
 
-def preprocess(image, second_try=False):
+def preprocess(image, parameters=(False, False)):
+    """
+    :param image: image you want to preprocess
+    :param parameters:
+            index 0 -> if True chooses second parameters for image filtering
+            index 1 -> if True chooses second parameters for detecting edges
+    :return:
+    gray_blur -> grayscale blurred image
+    gray_edge -> grayscale image with edges
+    width -> width of image after resizing
+    """
     # convert image to gray scale
     gray_img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
@@ -188,13 +198,16 @@ def preprocess(image, second_try=False):
     width = gray_img.shape[1]
 
     # blur image
-    if not second_try:
+    if not parameters[0]:
         gray_blur = cv2.bilateralFilter(gray_img, 11, 55, 55)
-    else:  # change parameters of filter if we couldn't find any license plate after first preprocessing
+    else:  # change parameters of filter if we couldn't find any license plate before
         gray_blur = cv2.bilateralFilter(gray_img, 11, 17, 17)
 
     # find edges in image
-    gray_edges = cv2.Canny(gray_blur, 30, 200)
+    if not parameters[1]:
+        gray_edges = cv2.Canny(gray_blur, 85, 255)
+    else:  # change parameters of edge detection if we couldn't find any license plate before
+        gray_edges = cv2.Canny(gray_blur, 30, 200)
 
     return gray_blur, gray_edges, width
 
@@ -203,12 +216,12 @@ def find_potential_plates_vertices(gray_edges, width):
     # find contours on image with edges
     contours, hierarchy = cv2.findContours(gray_edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    # find potential contours that matches car plate dimensions
+    # find potential contours that matches license plate dimensions
     potential_plates_vertices = []
     for contour in contours:
         [x, y, w, h] = cv2.boundingRect(contour)
 
-        # exclude contours that are smaller than 1/3 of image width and their height doesn't match ratio of car_plate
+        # exclude contours that are smaller than 1/3 of image width and their height doesn't match ratio of licenseplate
         if w < (width / 3) or h < (w * PLATE_HEIGHT_TO_WIDTH_RATIO) or w == width:
             continue
 
@@ -233,7 +246,7 @@ def find_potential_plates_vertices(gray_edges, width):
 
 
 def get_birds_eye_view(potential_plates_vertices, gray_edges, gray_blur, skip_ratio_check=False):
-    # change perspective in all potential car plates, to "birds eye" view
+    # change perspective in all potential license plates, to "birds eye" view
     warped_plates_edges = []
     warped_plates_gray = []
     for idx, vertices in enumerate(potential_plates_vertices):
@@ -248,10 +261,10 @@ def get_birds_eye_view(potential_plates_vertices, gray_edges, gray_blur, skip_ra
         maxWidth = max(int(widthA), int(widthB))
         maxHeight = max(int(heightA), int(heightB))
 
-        # if we couldn't get birds eye view in the first attempt, because image didnt match license plate ratio
+        # if we couldn't get birds eye view in the first attempt, because image didn't match license plate ratio
         # then skip this step
         if not skip_ratio_check:
-            # stop considering images that don't match car plate width to heigh ratio
+            # stop considering images that don't match license plate width to height ratio
             if maxHeight < maxWidth * PLATE_HEIGHT_TO_WIDTH_RATIO:
                 continue
 
@@ -317,7 +330,7 @@ def three_chars_in_first_part(chars_ROI):
     distance_between_chars = []
     for i, ROI in enumerate(chars_ROI):
         if i < LICENSE_PLATE_LENGTH - 1:
-            # calculate distance between neighbouhrs
+            # calculate distance between neighbours
             distance = chars_ROI[i + 1][0] - (chars_ROI[i][0] + chars_ROI[i][2])
             distance_between_chars.append(distance)
 
@@ -352,7 +365,7 @@ def perform_processing(image: np.ndarray) -> str:
     # find potential characters on potential plates
     chars_potential_plate = find_potential_chars_on_plates(warped_plates_edges)
 
-    # if no potential chars in plate found gey birds eye view once more but with other parameters
+    # if no potential chars in plate found get birds eye view once more but with other parameters
     if not any(chars_potential_plate):
         if SHOW_STEPS:
             print(f"No chars found in first try")
@@ -364,21 +377,36 @@ def perform_processing(image: np.ndarray) -> str:
         # find potential characters on potential plates
         chars_potential_plate = find_potential_chars_on_plates(warped_plates_edges)
 
-        # if no potential chars found in second try then preprocess image once more with different blur parameters
+        # if no potential chars found after skipping ratio checking
+        # preprocess image once more with different parameters in preprocessing
         if not any(chars_potential_plate):
             if SHOW_STEPS:
-                print(f"No chars found in second try")
-            gray_blur, gray_edges, width = preprocess(image, True)
-            # find vertices of potential plate
-            potential_plates_vertices = find_potential_plates_vertices(gray_edges, width)
-            # get bird eye view of potential plate based on found vertices
-            warped_plates_edges, warped_plates_gray = get_birds_eye_view(potential_plates_vertices, gray_edges,
-                                                                         gray_blur)
-            # find potential characters on potential plates
-            chars_potential_plate = find_potential_chars_on_plates(warped_plates_edges)
+                print(f"No chars found after skipping ratio checking")
+                print("Trying with different preprocessing parameters...")
+            # list of parameter tuples for preprocessing
+            # index 0 -> if True chooses second parameters for image filtering
+            # index 1 -> if True chooses second parameters for detecting edges
+            preprocess_parameters = [(True, False), (False, True), (True, True)]
 
-            # if no potential chars found in third try then return Qs which means we couldn't find license plate
+            for params in preprocess_parameters:
+                gray_blur, gray_edges, width = preprocess(image, params)
+                # find vertices of potential plate
+                potential_plates_vertices = find_potential_plates_vertices(gray_edges, width)
+                # get bird eye view of potential plate based on found vertices
+                warped_plates_edges, warped_plates_gray = get_birds_eye_view(potential_plates_vertices, gray_edges,
+                                                                             gray_blur, True)
+                # find potential characters on potential plates
+                chars_potential_plate = find_potential_chars_on_plates(warped_plates_edges)
+                # if no potential chars found in this try, try with different preprocess parameters
+                if not any(chars_potential_plate):
+                    continue
+                else:
+                    break
+
+            # if no potential chars found in image with all combinations then return empty license plate
             if not any(chars_potential_plate):
+                if SHOW_STEPS:
+                    print("NO LICENSE PLATE FOUND ON IMAGE")
                 return 'QQQQQQQ'  # return Q because it's forbidden character in polish license_plate
 
     if SHOW_STEPS:
