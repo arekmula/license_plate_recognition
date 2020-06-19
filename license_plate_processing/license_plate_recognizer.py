@@ -22,6 +22,12 @@ SHOW_STEPS = False
 
 
 def train_KNN(classifications, flattened_images):
+    """
+    Function that trains kNearest object based on given characters classifications and flattened images of characters
+    :param classifications: classification of characters
+    :param flattened_images: flattened images with characters
+    :return: True when finished
+    """
     # training classifications
     npa_classifications = classifications.astype(np.float32)
     # training images
@@ -37,6 +43,12 @@ def train_KNN(classifications, flattened_images):
 
 
 def get_potential_chars_ROI(chars_potential_plate):
+    """
+    Function that finds potential license plate with closest to 7 characters on it
+    :param chars_potential_plate: list of list of potential plate ROIs
+    :return: index of list containing ROIs with closest to 7 characters
+    """
+
     offset = 0  # this variable helps if there's more potential chars on potential plate than defined in CHARACTERS_NUMBER
     while True:
         for ROI_idx, potential_chars_ROI in enumerate(chars_potential_plate):
@@ -49,6 +61,14 @@ def get_potential_chars_ROI(chars_potential_plate):
 
 
 def recognize_chars_in_plate(potential_chars_ROI, img_gray):
+    """
+    Function that recognize characters on given image based on ROIs of potential characters
+    :param potential_chars_ROI: ROIs of potential characters
+    :param img_gray: gray scale image containing potential characters
+    :return:
+    license_plate - string containing recognized characters on license plate
+    potential_chars_ROI - list of potential chars ROIs
+    """
     # threshold image
     ret, img_threshed = cv2.threshold(img_gray, 200, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
     # license plate to be returned. We will add each recognized character
@@ -139,9 +159,13 @@ def license_plate_rules(license_plate, three_chars):
 
 def fill_empty_chars(license_plate, chars_ROI):
     """
+    Function that fills empty characters wtih ? in found license plate
+
     :param license_plate: license plate to fill
     :param chars_ROI: [x, y, w, h] for each character
-    :return: filled license plate
+    :return:
+    license plate - string with filled license plate
+    chars_ROI - ROIs of ? on image
     """
     # find the widest character
     widest_char = max(map(lambda x: x[2], chars_ROI))
@@ -177,6 +201,9 @@ def fill_empty_chars(license_plate, chars_ROI):
 
 def preprocess(image, parameters=(False, False)):
     """
+    Function that prepare image to further processing.
+    Converting image to gray scale, resizing image, blurring image, finding edges on image
+
     :param image: image you want to preprocess
     :param parameters:
             index 0 -> if True chooses second parameters for image filtering
@@ -213,6 +240,13 @@ def preprocess(image, parameters=(False, False)):
 
 
 def find_potential_plates_vertices(gray_edges, width):
+    """
+    Function that finds vertices of potential license plate on edge image
+
+    :param gray_edges: edge image
+    :param width: width of image
+    :return: list of potential plates vertices
+    """
     # find contours on image with edges
     contours, hierarchy = cv2.findContours(gray_edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -246,6 +280,16 @@ def find_potential_plates_vertices(gray_edges, width):
 
 
 def get_birds_eye_view(potential_plates_vertices, gray_edges, gray_blur, skip_ratio_check=False):
+    """
+    changes perspective in all potential license plates to birds eye view
+
+    :param potential_plates_vertices: list of vertices of potential license plate
+    :param gray_edges: edge image used in warp perspective
+    :param gray_blur: blurred image used in warp perspective
+    :param skip_ratio_check: skip checking ratio of potential license plate to match all warp all potential contours
+    :return: warped_plates_edges: list containing birds eye view edge images with license plate
+    warped_plates_gray: list containing birds eye view blur images with license plate
+    """
     # change perspective in all potential license plates, to "birds eye" view
     warped_plates_edges = []
     warped_plates_gray = []
@@ -290,6 +334,12 @@ def get_birds_eye_view(potential_plates_vertices, gray_edges, gray_blur, skip_ra
 
 
 def find_potential_chars_on_plates(warped_plates_edges):
+    """
+    Function that finds ROIs of potential chars on image containing license plate
+
+    :param warped_plates_edges: list containing birds eye view edge images with license plate
+    :return: list of ROIS of potential chars on license plate
+    """
     chars_potential_plate = []
     for idx, plate in enumerate(warped_plates_edges):
 
@@ -324,7 +374,9 @@ def find_potential_chars_on_plates(warped_plates_edges):
 
 def three_chars_in_first_part(chars_ROI):
     """
-    :param chars_ROI: [x, y, w, h] for each character
+    Function that checks if license plate has 3 chars in first part of license plate or 2
+
+    :param chars_ROI: list of [x, y, w, h] for each character
     :return: TRUE if license plate has 3 chars in first part
     """
     distance_between_chars = []
@@ -347,7 +399,13 @@ def three_chars_in_first_part(chars_ROI):
         return False
 
 
-def perform_processing(image: np.ndarray) -> str:
+def recognize_license_plate(image: np.ndarray) -> str:
+    """
+    Function that recognize license plate on given image
+
+    :param image: image containing license plate
+    :return: string of characters found on license plate
+    """
     # print(f'image.shape: {image.shape}')
 
     if SHOW_STEPS:

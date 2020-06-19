@@ -4,7 +4,7 @@ from pathlib import Path
 
 import cv2
 
-from license_plate_processing import perform_processing
+from license_plate_processing import recognize_license_plate
 from license_plate_processing import get_chars_contour
 from license_plate_processing import train_classifier
 from license_plate_processing import train_KNN
@@ -32,7 +32,7 @@ def main():
             print(f'Error loading image {image_path}')
             continue
 
-        results[image_path.name] = perform_processing(image)
+        results[image_path.name] = recognize_license_plate(image)
 
     with results_file.open('w') as output_file:
         json.dump(results, output_file, indent=4)
