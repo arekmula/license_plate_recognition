@@ -162,7 +162,7 @@ def fill_empty_chars(license_plate, chars_ROI):
         char_idx = np.argmax(distance_between_chars)
         # add character in char_idx place
         s = list(license_plate)
-        s.insert(char_idx, 'Q')  # insert Q, because it's forbidden character in polish license plate
+        s.insert(char_idx, '?')  # insert ? in empty space
         license_plate = "".join(s)
         # add generated ROI in char_idx place
         new_ROI = list(np.copy(chars_ROI[char_idx]))
@@ -407,7 +407,7 @@ def perform_processing(image: np.ndarray) -> str:
             if not any(chars_potential_plate):
                 if SHOW_STEPS:
                     print("NO LICENSE PLATE FOUND ON IMAGE")
-                return 'QQQQQQQ'  # return Q because it's forbidden character in polish license_plate
+                return '???????'  # return ?
 
     if SHOW_STEPS:
         for idx, potential_chars_ROI in enumerate(chars_potential_plate):
