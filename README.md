@@ -17,6 +17,9 @@ Project for Image Processing Course. The goal of the project is to recognize pol
 - Total score: 63.70% (Every correct read character on license plate -> 1 point. Correct read of whole license plate equals to 1 point for each character + 3 additional points.)
 - execution time per image: 0.11s
 
+# Usage
+`python main.py <path_to_folder_images> <path_to_json_results_file> `
+
 # How it works?
 #### Preprocess the image.
 - convert to gray scale
