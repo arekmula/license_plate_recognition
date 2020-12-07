@@ -13,11 +13,20 @@ Project for Image Processing Course. The goal of the project is to recognize pol
 - there's an option to use other libraries (like scikit-image) but you cannot use external OCR modules or trained models that can read characters
 - maximum time for each image processing is 2 seconds 
 
+# Results on private test set:
+- Bounding box accuracy of license plate: 96,42% (27/28)
+- Bounding box accuracy of characters in license plate: 91,32% (179/196)
+- Total score: 86,42% (Every correct read character on license plate -> 1 point. Correct read of whole license plate equals to 1 point for each character + 3 additional points.)
+
+
 # Results on final, unknown test set:
 - Total score: 63.70% (Every correct read character on license plate -> 1 point. Correct read of whole license plate equals to 1 point for each character + 3 additional points.)
 - execution time per image: 0.11s
 
 # Usage
+- Create virtual environment using `python3 -m venv venv`
+- Install requirements from `requirements.txt`
+- Run script with
 `python main.py <path_to_folder_images> <path_to_json_results_file> `
 
 # How it works?
